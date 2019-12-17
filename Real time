@@ -1,0 +1,154 @@
+---
+title: "Stock Analysis"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+    theme: united
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(readxl)
+#library(rhandsontable)
+library(tidyquant)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(reshape)
+library(shinyWidgets)
+```
+
+```{r}
+Ticker <- read_excel("D:/Analytics/R Programming/Stocks/Ticker.xlsx")
+Ticker <- as.data.frame(Ticker)
+```
+
+Company Daily Stocks
+=================
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+    radioButtons("R","Parameters",choices = c("Individual Company","Multiple Companies"),selected = character(0),inline = F)
+    output$filter1 <- renderUI({
+      if(input$R == "Individual Company"){
+        label = "Company"
+        selectInput("C",label,choices = c("",levels(factor(Ticker$Ticker))))
+      } else if(input$R == "Multiple Companies"){
+        label = "Companies"
+        pickerInput("C1",label,choices = c("",levels(factor(Ticker$Ticker))),multiple = TRUE,options = list(`actions-box` = TRUE))
+      }
+    })
+    uiOutput("filter1")
+    
+    actionButton("A","Execute",icon = NULL)
+    
+    output$filter2 <- renderUI({
+      if(input$R == "Individual Company"){
+        label = "Since No of days"
+        sliderInput("S",label,min = 1,max = 100,value = 10)
+      } else if(input$R == "Multiple Companies"){
+        label = "Since No of days"
+        sliderInput("S1",label,min = 1,max = 10,value = 10)
+      }
+    })
+    uiOutput("filter2")
+    
+    
+    output$filter3 <- renderUI({
+      if(input$R == "Individual Company"){
+        label = "Open-Close-High-Low"
+        checkboxGroupInput("R12",label,choices = c("open","close","high","low","Close - Low"),selected = character(0),inline = F)
+      } else if(input$R == "Multiple Companies"){
+        label = "Segments"
+        radioButtons("R13",label,choices = c("Open","Close","High"),selected = character(0),inline = T)
+      }
+    })
+    
+    uiOutput("filter3")
+```
+
+Column {data-height=5000}
+-----------------------------------------------------------------------
+
+### Stocks Table
+
+```{r}
+observeEvent(input$A,{
+  if(!is.null(input$C) && !is.null(input$S)) {
+    #asd <- data.frame(a=c(input$C[]))
+    asd1 <- input$C
+    days <- input$S
+    as2 <- tq_get(asd1, from = Sys.Date()-days, to = Sys.Date())
+    as2 <- as.data.frame(as2)
+    
+    output$table1 <- renderDataTable({
+    print(as2[rev(order(as2$date)),])
+    })
+  }
+   else {
+    output$table1 <- renderDataTable({
+    })
+  }
+})
+
+observeEvent(input$A,{
+  if(!is.null(input$C1) && !is.null(input$S1)) {
+    #asd <- data.frame(a=c(input$C[]))
+    asd1 <- input$C1
+    days <- input$S1
+    as23 <- tq_get(asd1, from = Sys.Date()-days, to = Sys.Date())
+    as23 <- as.data.frame(as23)
+    as23$`Close - Low` <- as23$close-as23$low
+    asa <- as23 %>% group_by(symbol) %>% summarise('mean `C-L`'=mean(`C-L`),'sd `C-L`'=sd(`C-L`))
+    
+    output$table12 <- renderDataTable({
+    print(asa)
+    })
+  }
+   else {
+    output$table12 <- renderDataTable({
+    })
+  }
+})
+
+output$filter_70 <- renderUI(
+  if (input$R == "Individual Company") {
+  dataTableOutput("table1")
+} else if (input$R == "Multiple Companies") {
+  dataTableOutput("table12")
+}
+)
+uiOutput("filter_70")
+```
+
+### Plots
+
+```{r}
+output$t10 <- renderPlotly({
+    if (!is.null(input$C) && !is.null(input$S)){
+       asd1 <- input$C
+       days <- input$S
+       req(input$R12)
+       as2 <- tq_get(asd1, from = Sys.Date()-days, to = Sys.Date())
+       as2 <- as.data.frame(as2)
+       as21 <- as2[c(1:5)]
+       as21$`Close - Low` <- as21$close-as21$low
+       as2_melt <- melt(as21,id=c("date"))
+       plot_data <- as2_melt
+       
+    } 
+    if (!is.null(input$R12))
+    {
+      plot_data <- plot_data %>% filter(variable %in% input$R12)
+    }
+    if (!is.null(input$R12))
+    {
+      p <- ggplotly(ggplot(data = plot_data,aes(x=date,y=value,color=variable))+geom_line(size=0.2)+theme(legend.position = "none"))
+    } 
+  p
+})
+plotlyOutput("t10")
+```
